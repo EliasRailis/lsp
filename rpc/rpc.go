@@ -70,3 +70,33 @@ func Split(data []byte, _ bool) (advance int, token []byte, err error) {
 	totalLength := len(header) + 4 + contentLength
 	return totalLength, data[:totalLength], nil
 }
+
+func GetHeaderMsg(msg []byte) string {
+	header, _, found := bytes.Cut(msg, []byte{'\r', '\n', '\r', '\n'})
+
+	if !found {
+		return ""
+	}
+
+	return string(header)
+}
+
+func PretifyJsonMsg(msg []byte) (string, error) {
+	_, content, found := bytes.Cut(msg, []byte{'\r', '\n', '\r', '\n'})
+
+	if !found {
+		return "", nil
+	}
+
+	var data map[string]interface{}
+	if err := json.Unmarshal(content, &data); err != nil {
+		return "", err
+	}
+
+	prettyJson, err := json.MarshalIndent(data, "", "   ")
+	if err != nil {
+		return "", err
+	}
+
+	return string(prettyJson), nil
+}
