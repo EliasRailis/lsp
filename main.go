@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"log"
+	"lsplearning/analysis"
 	"lsplearning/lsp"
 	"lsplearning/rpc"
 	"os"
@@ -16,6 +17,8 @@ func main() {
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Split(rpc.Split)
 
+	state := analysis.NewState()
+
 	for scanner.Scan() {
 		msg := scanner.Bytes()
 
@@ -25,20 +28,18 @@ func main() {
 		method, content, err := rpc.DecodeMessage(msg)
 		if err != nil {
 			logger.Printf("Got an error: %s", err)
+			continue
 		}
 
-		if err != nil {
-			panic("hello error in the for")
-		}
-
-		handleMessage(logger, header, jsonPretty, method, content)
+		handleMessage(logger, header, jsonPretty, state, method, content)
 	}
 }
 
-func handleMessage(logger *log.Logger, header string, jsonS string, method string, contents []byte) {
+func handleMessage(logger *log.Logger, header string, jsonPretty string, state analysis.State,
+	method string, contents []byte) {
 	logger.Println(header)
 	logger.Printf("Received message with method: %s", method)
-	logger.Println(jsonS)
+	logger.Println(jsonPretty)
 
 	switch method {
 	case "initialize":
@@ -59,6 +60,30 @@ func handleMessage(logger *log.Logger, header string, jsonS string, method strin
 		writer.Write([]byte(reply))
 
 		logger.Print("Sent the reply")
+	case "textDocument/didOpen":
+		var request lsp.DidOpenTextDocumentNotification
+		if err := json.Unmarshal(contents, &request); err != nil {
+			logger.Printf("didOpen: %s", err)
+			return
+		}
+
+		logger.Printf("Opened: %s", request.Params.TextDocument.URI)
+
+		state.OpenDocument(request.Params.TextDocument.URI, request.Params.TextDocument.Text)
+	case "textDocument/didChange":
+		var request lsp.TextDocumentDidChangeNotification
+		if err := json.Unmarshal(contents, &request); err != nil {
+			logger.Printf("didChange: %s", err)
+			return
+		}
+
+		logger.Printf("Changed: %s", request.Params.TextDocument.URI)
+
+		for _, change := range request.Params.ContentChanges {
+			state.UpdateDocument(
+				request.Params.TextDocument.URI,
+				change.Text)
+		}
 	}
 }
 
